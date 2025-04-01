@@ -52,8 +52,8 @@ export async function deployHtml(value: string, baseUrl: string) {
     throw new Error(`HTTP error: ${res.status} ${res.statusText}`);
   }
 
-  const { url } = await res.json();
-  return url;
+  const { url, error } = await res.json();
+  return url || error;
 }
 
 server.tool(
@@ -69,13 +69,13 @@ server.tool(
   async ({ value }) => {
     try {
       const baseUrl = await getBaseUrl();
-      const url = await deployHtml(value, baseUrl);
+      const result = await deployHtml(value, baseUrl);
 
       return {
         content: [
           {
             type: 'text' as const,
-            text: url,
+            text: result,
           },
         ],
       };
