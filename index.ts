@@ -27,7 +27,7 @@ const handleApiError = (error: any) => {
 
 export async function getBaseUrl(): Promise<string> {
   try {
-    const res = await fetch('https://mcp.edgeone.app/get_base_url');
+    const res = await fetch('https://mcp.edgeone.site/get_base_url');
     if (!res.ok) {
       throw new Error(`HTTP error: ${res.status} ${res.statusText}`);
     }
