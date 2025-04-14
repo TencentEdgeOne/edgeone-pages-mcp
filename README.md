@@ -10,6 +10,10 @@ An MCP service for deploying HTML content to EdgeOne Pages and obtaining a publi
 
 ![](https://cloudcache.tencent-cloud.com/qcloud/ui/static/static_source_business/04ff9814-bcd3-442c-a2d0-eefd4ee1b13c.gif)
 
+## Requirements
+
+* Node.js 18 or higher
+
 ## Configure MCP
 
 ```json
