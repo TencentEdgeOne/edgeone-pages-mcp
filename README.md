@@ -10,11 +10,11 @@ An MCP service for deploying HTML content to EdgeOne Pages and obtaining a publi
 
 ![](https://cloudcache.tencent-cloud.com/qcloud/ui/static/static_source_business/04ff9814-bcd3-442c-a2d0-eefd4ee1b13c.gif)
 
-## Requirements
-
-* Node.js 18 or higher
-
 ## Configure MCP
+
+### stdio MCP Server
+
+Suitable for most MCP applications
 
 ```json
 {
@@ -22,6 +22,20 @@ An MCP service for deploying HTML content to EdgeOne Pages and obtaining a publi
     "edgeone-pages-mcp-server": {
       "command": "npx",
       "args": ["edgeone-pages-mcp"]
+    }
+  }
+}
+```
+
+### Streamable HTTP MCP Server
+
+Available in applications supporting Streamable HTTP MCP Server
+
+```json
+{
+  "mcpServers": {
+    "edgeone-pages-mcp-server": {
+      "url": "https://mcp-on-edge.edgeone.site/mcp-server"
     }
   }
 }
