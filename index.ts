@@ -3,49 +3,22 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { randomBytes } from 'crypto';
-import os from 'os';
-import path from 'path';
-import fs from 'fs';
+import { deployFolderOrZipToEdgeOne } from './tools/deploy_folder_or_zip.js';
+import { deployHtmlToEdgeOne } from './tools/deploy_html.js';
 
-let installationId: string;
-
-function generateInstallationId(): string {
-  try {
-    const idFilePath = path.join(os.tmpdir(), 'edgeone-pages-id');
-    
-    if (fs.existsSync(idFilePath)) {
-      const id = fs.readFileSync(idFilePath, 'utf8').trim();
-      if (id) {
-        return id;
-      }
-    }
-    
-    const newId = randomBytes(8).toString('hex');
-    
-    try {
-      fs.writeFileSync(idFilePath, newId);
-    } catch (writeError) {
-      // do nothing
-    }
-    
-    return newId;
-  } catch (error) {
-    return randomBytes(8).toString('hex');
-  }
-}
-
-installationId = generateInstallationId();
+import dotenv from 'dotenv';
+dotenv.config();
 
 const server = new McpServer({
   name: 'edgeone-pages-deploy-mcp-server',
   version: '1.0.0',
-  description:
-    "An MCP service for deploying HTML content to EdgeOne Pages. Simply provide HTML content to deploy to EdgeOne's Pages service and receive a publicly accessible URL for your deployed page.",
+  description: `Deploy HTML content to EdgeOne Pages with ease.
+Provide your HTML and let the service handle deployment.
+Also support to deploy a folder to EdgeOne Pages.
+Receive a public URL to access your live page.`,
 });
 
-const handleApiError = (error: any) => {
-  console.error('API Error:', error);
+const handleUncaughtError = (error: any) => {
   const errorMessage = error.message || 'Unknown error occurred';
   return {
     content: [
@@ -58,52 +31,18 @@ const handleApiError = (error: any) => {
   };
 };
 
-export async function getBaseUrl(): Promise<string> {
-  try {
-    const res = await fetch('https://mcp.edgeone.site/get_base_url');
-    if (!res.ok) {
-      throw new Error(`HTTP error: ${res.status} ${res.statusText}`);
-    }
-    const data = await res.json();
-    return data.baseUrl;
-  } catch (error) {
-    console.error('Failed to get base URL:', error);
-    throw error;
-  }
-}
-
-export async function deployHtml(value: string, baseUrl: string) {
-  const res = await fetch(baseUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Installation-ID': installationId
-    },
-    body: JSON.stringify({ value }),
-  });
-
-  if (!res.ok) {
-    throw new Error(`HTTP error: ${res.status} ${res.statusText}`);
-  }
-
-  const { url, error } = await res.json();
-  return url || error;
-}
-
 server.tool(
-  'deploy-html',
+  'deploy_html',
   'Deploy HTML content to EdgeOne Pages, return the public URL',
   {
-    value: z
-      .string()
-      .describe(
-        'HTML or text content to deploy. Provide complete HTML or text content you want to publish, and the system will return a public URL where your content can be accessed.'
-      ),
+    value: z.string().describe(
+      `Provide the full HTML markup you wish to publish.
+After deployment, the system will generate and return a public URL where your content can be accessed.`
+    ),
   },
   async ({ value }) => {
     try {
-      const baseUrl = await getBaseUrl();
-      const result = await deployHtml(value, baseUrl);
+      const result = await deployHtmlToEdgeOne(value);
 
       return {
         content: [
@@ -114,12 +53,44 @@ server.tool(
         ],
       };
     } catch (e) {
-      return handleApiError(e);
+      return handleUncaughtError(e);
     }
   }
 );
 
-console.log('Starting edgeone-pages-deploy-mcp-server...');
-const transport = new StdioServerTransport();
-await server.connect(transport);
-console.log('edgeone-pages-deploy-mcp-server started successfully!');
+server.tool(
+  'deploy_folder_or_zip',
+  'Deploy a folder or zip file to EdgeOne Pages, return the public URL',
+  {
+    localPath: z
+      .string()
+      .describe(
+        'Provide the path to the folder or zip file you wish to deploy.'
+      ),
+  },
+  async ({ localPath }) => {
+    try {
+      const result = await deployFolderOrZipToEdgeOne(localPath);
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: result,
+          },
+        ],
+      };
+    } catch (e) {
+      return handleUncaughtError(e);
+    }
+  }
+);
+
+async function main() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
+
+main().catch((error) => {
+  console.error('Error starting server:', error);
+  process.exit(1);
+});

@@ -4,6 +4,7 @@
 src/
 tests/
 examples/
+test.ts
 
 # Config files
 tsconfig.json

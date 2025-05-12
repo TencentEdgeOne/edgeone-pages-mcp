@@ -1,6 +1,6 @@
 {
   "name": "edgeone-pages-mcp",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "repository": {
     "type": "git",
     "url": "https://github.com/TencentEdgeOne/edgeone-pages-mcp"
@@ -30,11 +30,12 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",
+    "cos-nodejs-sdk-v5": "^2.14.7",
     "dotenv": "^16.4.7",
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "typescript": "^5.4.2",
-    "@types/node": "^20.11.28"
+    "@types/node": "^20.11.28",
+    "typescript": "^5.4.2"
   }
 }
