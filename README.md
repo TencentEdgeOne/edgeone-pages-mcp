@@ -33,9 +33,9 @@ Suitable for most MCP applications
       "command": "npx",
       "args": ["edgeone-pages-mcp"],
       "env": {
-        // Optional. If deploying a folder or zip file to an EdgeOne Pages project, provide your EdgeOne Pages API Key.
-        // How to obtain your API Key: https://edgeone.ai/document/177158578324279296
-        "EDGEONE_PAGES_API_KEY": "",
+        // Optional. If deploying a folder or zip file to an EdgeOne Pages project, provide your EdgeOne Pages API token.
+        // How to obtain your API token: https://edgeone.ai/document/177158578324279296
+        "EDGEONE_PAGES_API_TOKEN": "",
         // Optional. Leave empty to create a new EdgeOne Pages project.
         // Provide a project name to update an existing project.
         "EDGEONE_PAGES_PROJECT_NAME": ""

@@ -12,7 +12,7 @@ const BASE_API_URL2 = 'https://pages-api.edgeone.ai/v1';
 
 let BASE_API_URL = '';
 
-const Authorization = `Bearer ${process.env.EDGEONE_PAGES_API_KEY}`;
+const Authorization = `Bearer ${process.env.EDGEONE_PAGES_API_TOKEN}`;
 const projectName = process.env.EDGEONE_PAGES_PROJECT_NAME;
 
 // Types
@@ -134,7 +134,7 @@ const checkAndSetBaseUrl = async (): Promise<void> => {
   } else {
     // Both endpoints failed
     throw new Error(
-      'Invalid EDGEONE_PAGES_API_KEY. Please check your API key. For more information, please refer to https://edgeone.ai/document/177158578324279296'
+      'Invalid EDGEONE_PAGES_API_TOKEN. Please check your API token. For more information, please refer to https://edgeone.ai/document/177158578324279296'
     );
   }
 };
