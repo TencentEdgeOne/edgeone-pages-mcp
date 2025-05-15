@@ -1,5 +1,4 @@
 import COS from 'cos-nodejs-sdk-v5';
-import { GetAuthorizationCallbackParams } from 'cos-nodejs-sdk-v5';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import dotenv from 'dotenv';
@@ -12,8 +11,27 @@ const BASE_API_URL2 = 'https://pages-api.edgeone.ai/v1';
 
 let BASE_API_URL = '';
 
-const Authorization = `Bearer ${process.env.EDGEONE_PAGES_API_TOKEN}`;
-const projectName = process.env.EDGEONE_PAGES_PROJECT_NAME;
+// Export BASE_API_URL for use in other files
+export const getBaseApiUrl = () => BASE_API_URL;
+
+// Get API key from environment variable or use argument
+const getApiKey = () => {
+  return process.env.EDGEONE_PAGES_API_TOKEN;
+};
+
+// Get authorization header with API key
+export const getAuthorization = () => {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    throw new Error(
+      'Missing EDGEONE_PAGES_API_TOKEN. Please provide a token with --token or set it as an environment variable.'
+    );
+  }
+  return `Bearer ${apiKey}`;
+};
+
+// Get projectName from environment variable
+const getProjectName = () => process.env.EDGEONE_PAGES_PROJECT_NAME || '';
 
 // Types
 interface FileInfo {
@@ -75,6 +93,12 @@ interface ProjectsResponse {
   };
 }
 
+interface CreatePagesProjectResponse {
+  Response: {
+    ProjectId: string;
+  };
+}
+
 interface EncipherTokenResponse {
   Response: {
     Token: string;
@@ -82,11 +106,48 @@ interface EncipherTokenResponse {
   };
 }
 
+interface DeploymentResult {
+  DeploymentId: string;
+  ProjectId: string;
+  Status: string;
+  Code: number;
+  BuildCost: string;
+  ViaMeta: string;
+  Env: string;
+  RepoBranch: string | null;
+  RepoCommitHash: string;
+  RepoCommitMsg: string | null;
+  PreviewUrl: string;
+  CreatedOn: string;
+  ModifiedOn: string;
+  CoverUrl: string | null;
+  UsedInProd: boolean;
+  MetaData: string;
+  ProjectUrl: string;
+}
+
 interface UploadResult {
   success: boolean;
   targetPath?: string;
   error?: any;
 }
+
+// Token cache mechanism
+interface TokenCache {
+  token: CosTempTokenResponse | null;
+  cos: COS | null;
+}
+
+const tokenCache: TokenCache = {
+  token: null,
+  cos: null,
+};
+
+// Reset token cache
+const resetTokenCache = () => {
+  tokenCache.token = null;
+  tokenCache.cos = null;
+};
 
 // Utility functions
 const sleep = (ms: number): Promise<void> => {
@@ -97,7 +158,7 @@ const checkAndSetBaseUrl = async (): Promise<void> => {
   const res1 = await fetch(`${BASE_API_URL1}`, {
     method: 'POST',
     headers: {
-      Authorization,
+      Authorization: getAuthorization(),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -110,7 +171,7 @@ const checkAndSetBaseUrl = async (): Promise<void> => {
   const res2 = await fetch(`${BASE_API_URL2}`, {
     method: 'POST',
     headers: {
-      Authorization,
+      Authorization: getAuthorization(),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -121,8 +182,12 @@ const checkAndSetBaseUrl = async (): Promise<void> => {
   });
 
   // Parse responses
-  const json1 = await res1.json().catch(() => ({ Code: -1 }));
-  const json2 = await res2.json().catch(() => ({ Code: -1 }));
+  const json1 = (await res1
+    .json()
+    .catch(() => ({ Code: -1 }))) as ApiResponse<ProjectsResponse>;
+  const json2 = (await res2
+    .json()
+    .catch(() => ({ Code: -1 }))) as ApiResponse<ProjectsResponse>;
 
   // Check if either endpoint worked
   if (json1.Code === 0) {
@@ -144,13 +209,20 @@ const checkAndSetBaseUrl = async (): Promise<void> => {
  * Get temporary COS token for file uploads
  */
 const getCosTempToken = async (): Promise<CosTempTokenResponse> => {
+  // Return cached token if available
+  if (tokenCache.token) {
+    return tokenCache.token;
+  }
+
   let body;
-  if (projectName) {
-    const result = await describePagesProjects({ projectName });
+  if (getProjectName()) {
+    const result = await describePagesProjects({
+      projectName: getProjectName(),
+    });
     if (result.Data.Response.Projects.length > 0) {
       body = { ProjectId: result.Data.Response.Projects[0].ProjectId };
     } else {
-      throw new Error(`Project ${projectName} not found`);
+      throw new Error(`Project ${getProjectName()} not found`);
     }
   } else {
     body = { ProjectName: `local-upload-${Date.now()}` };
@@ -160,7 +232,7 @@ const getCosTempToken = async (): Promise<CosTempTokenResponse> => {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization,
+      Authorization: getAuthorization(),
     },
     body: JSON.stringify(
       Object.assign(body, { Action: 'DescribePagesCosTempToken' })
@@ -172,18 +244,23 @@ const getCosTempToken = async (): Promise<CosTempTokenResponse> => {
     throw new Error(`API request failed (${res.status}): ${errorText}`);
   }
 
-  return await res.json();
+  const tokenResponse = (await res.json()) as CosTempTokenResponse;
+  // Cache the token
+  tokenCache.token = tokenResponse;
+  return tokenResponse;
 };
 
 /**
  * Get or create a project
  */
 const getOrCreateProject = async (): Promise<ApiResponse<ProjectsResponse>> => {
-  if (projectName) {
-    const result = await describePagesProjects({ projectName });
+  if (getProjectName()) {
+    const result = await describePagesProjects({
+      projectName: getProjectName(),
+    });
     if (result.Data.Response.Projects.length > 0) {
       console.log(
-        `[getOrCreateProject] Project ${projectName} already exists. Using existing project.`
+        `[getOrCreateProject] Project ${getProjectName()} already exists. Using existing project.`
       );
       return result;
     }
@@ -202,12 +279,12 @@ const createPagesProject = async (): Promise<ApiResponse<ProjectsResponse>> => {
     const res = await fetch(`${BASE_API_URL}`, {
       method: 'POST',
       headers: {
-        Authorization,
+        Authorization: getAuthorization(),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         Action: 'CreatePagesProject',
-        Name: projectName || `local-upload-${Date.now()}`,
+        Name: getProjectName() || `local-upload-${Date.now()}`,
         Provider: 'Upload',
         Channel: 'Custom',
         Area: 'global',
@@ -219,7 +296,7 @@ const createPagesProject = async (): Promise<ApiResponse<ProjectsResponse>> => {
       throw new Error(`API request failed (${res.status}): ${errorText}`);
     }
 
-    const data = await res.json();
+    const data = (await res.json()) as ApiResponse<CreatePagesProjectResponse>;
 
     const projectInfo = await describePagesProjects({
       projectId: data?.Data?.Response?.ProjectId,
@@ -227,7 +304,7 @@ const createPagesProject = async (): Promise<ApiResponse<ProjectsResponse>> => {
 
     return projectInfo;
   } catch (error) {
-    console.error('Error creating pages project:', error);
+    console.error('Error creating pages project: ' + error);
     throw error;
   }
 };
@@ -252,7 +329,7 @@ const describePagesProjects = async (opts: {
   const res = await fetch(`${BASE_API_URL}`, {
     method: 'POST',
     headers: {
-      Authorization,
+      Authorization: getAuthorization(),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -269,7 +346,7 @@ const describePagesProjects = async (opts: {
     throw new Error(`API request failed (${res.status}): ${errorText}`);
   }
 
-  return await res.json();
+  return (await res.json()) as ApiResponse<ProjectsResponse>;
 };
 
 /**
@@ -281,7 +358,7 @@ const describePagesDeployments = async (
   const res = await fetch(`${BASE_API_URL}`, {
     method: 'POST',
     headers: {
-      Authorization,
+      Authorization: getAuthorization(),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -299,7 +376,7 @@ const describePagesDeployments = async (
     throw new Error(`API request failed (${res.status}): ${errorText}`);
   }
 
-  return await res.json();
+  return (await res.json()) as ApiResponse<any>;
 };
 
 /**
@@ -311,7 +388,7 @@ const describePagesEncipherToken = async (
   const res = await fetch(`${BASE_API_URL}`, {
     method: 'POST',
     headers: {
-      Authorization,
+      Authorization: getAuthorization(),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -325,7 +402,7 @@ const describePagesEncipherToken = async (
     throw new Error(`API request failed (${res.status}): ${errorText}`);
   }
 
-  return await res.json();
+  return (await res.json()) as ApiResponse<EncipherTokenResponse>;
 };
 
 /**
@@ -342,21 +419,22 @@ const createPagesDeployment = async (opts: {
   projectId: string;
   targetPath: string;
   isZip: boolean;
+  env: 'Production' | 'Preview';
 }): Promise<ApiResponse<any>> => {
-  const { projectId, targetPath, isZip } = opts;
+  const { projectId, targetPath, isZip, env } = opts;
 
   const res = await fetch(`${BASE_API_URL}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization,
+      Authorization: getAuthorization(),
     },
     body: JSON.stringify({
       Action: 'CreatePagesDeployment',
       ProjectId: projectId,
       ViaMeta: 'Upload',
       Provider: 'Upload',
-      Env: 'Production',
+      Env: env,
       DistType: isZip ? 'Zip' : 'Folder',
       TempBucketPath: targetPath,
     }),
@@ -369,8 +447,7 @@ const createPagesDeployment = async (opts: {
     );
   }
 
-  const data = await res.json();
-
+  const data = (await res.json()) as ApiResponse<any>;
 
   if (data?.Data?.Response?.Error) {
     throw new Error(
@@ -383,37 +460,33 @@ const createPagesDeployment = async (opts: {
 
 // COS (Cloud Object Storage) functions
 // Initialize COS with dynamic authentication
-const cos = new COS({
-  getAuthorization: async function (_options, callback) {
-    try {
-      const result = await getCosTempToken();
-      if (
-        result.Code !== 0 ||
-        !result.Data ||
-        !result.Data.Response ||
-        !result.Data.Response.Credentials
-      ) {
-        console.error('Failed to get COS temp token', result);
-        return callback({} as GetAuthorizationCallbackParams);
-      }
+const getCosInstance = async (): Promise<COS> => {
+  if (tokenCache.cos) {
+    return tokenCache.cos;
+  }
 
-      const response = result.Data.Response;
-      const credentials = response.Credentials;
+  const result = await getCosTempToken();
+  if (
+    result.Code !== 0 ||
+    !result.Data ||
+    !result.Data.Response ||
+    !result.Data.Response.Credentials
+  ) {
+    throw new Error('Failed to get COS temp token');
+  }
 
-      callback({
-        TmpSecretId: credentials.TmpSecretId,
-        TmpSecretKey: credentials.TmpSecretKey,
-        SecurityToken: credentials.Token,
-        StartTime: Math.floor(Date.now() / 1000), // Current time in seconds
-        ExpiredTime: response.ExpiredTime,
-        ScopeLimit: true,
-      });
-    } catch (error) {
-      console.error('Error getting COS temp token:', error);
-      callback({} as GetAuthorizationCallbackParams);
-    }
-  },
-});
+  const response = result.Data.Response;
+  const credentials = response.Credentials;
+
+  const cos = new COS({
+    SecretId: credentials.TmpSecretId,
+    SecretKey: credentials.TmpSecretKey,
+    SecurityToken: credentials.Token,
+  });
+
+  tokenCache.cos = cos;
+  return cos;
+};
 
 /**
  * Recursively list all files in a directory
@@ -448,7 +521,7 @@ const fastListFolder = async (rootPath: string): Promise<FileInfo[]> => {
     }
     return list;
   } catch (error) {
-    console.error('Error in fastListFolder:', error);
+    console.error('Error in fastListFolder: ' + error);
     throw error;
   }
 };
@@ -491,6 +564,7 @@ const getFiles = (
  * Upload files to COS
  */
 const uploadFiles = async (files: CosFile[]): Promise<any> => {
+  const cos = await getCosInstance();
   return new Promise((resolve, reject) => {
     cos.uploadFiles(
       {
@@ -498,7 +572,6 @@ const uploadFiles = async (files: CosFile[]): Promise<any> => {
         SliceSize: 1024 * 1024,
       },
       function (err, data) {
-        // console.log('data', JSON.stringify(data));
         if (err) {
           reject(err);
         } else {
@@ -510,11 +583,9 @@ const uploadFiles = async (files: CosFile[]): Promise<any> => {
 };
 
 /**
- * Upload directory to COS
+ * Upload a directory or zip file to EdgeOne COS
  */
-const uploadDirectoryToCOS = async (
-  localPath: string
-): Promise<UploadResult> => {
+const uploadToEdgeOneCOS = async (localPath: string): Promise<UploadResult> => {
   try {
     const tokenResult = await getCosTempToken();
     if (tokenResult.Code !== 0 || !tokenResult?.Data?.Response) {
@@ -541,7 +612,7 @@ const uploadDirectoryToCOS = async (
     if (isZip) {
       // Upload single zip file to COS
       console.log(
-        `[uploadDirectoryToCOS] Uploading zip file to COS bucket ${bucket} in region ${region} at path ${targetPath}...`
+        `[uploadToEdgeOneCOS] Uploading zip file to COS with targetPath: ${targetPath}...`
       );
 
       const fileName = path.basename(localPath);
@@ -551,6 +622,7 @@ const uploadDirectoryToCOS = async (
       const fileBuffer = await fs.readFile(localPath);
       const fileStats = await fs.stat(localPath);
 
+      const cos = await getCosInstance();
       return new Promise((resolve, reject) => {
         cos.putObject(
           {
@@ -560,13 +632,12 @@ const uploadDirectoryToCOS = async (
             Body: fileBuffer,
             ContentLength: fileStats.size,
           },
-          function (err, data) {
-            // console.log('data', data);
+          function (err) {
             if (err) {
-              console.error('Error uploading zip file to COS:', err);
+              console.error('Error uploading zip file to COS: ' + err);
               reject(err);
             } else {
-              console.log(`[uploadDirectoryToCOS] Zip file upload complete.`);
+              console.log(`[uploadToEdgeOneCOS] Upload successful.`);
               resolve({
                 success: true,
                 targetPath: key,
@@ -584,10 +655,10 @@ const uploadDirectoryToCOS = async (
 
       // Upload files to COS
       console.log(
-        `[uploadDirectoryToCOS] Uploading ${files.length} files to COS bucket ${bucket} in region ${region} at path ${targetPath}...`
+        `[uploadToEdgeOneCOS] Uploading ${files.length} files to COS with targetPath: ${targetPath}...`
       );
       await uploadFiles(files);
-      console.log(`[uploadDirectoryToCOS] COS upload complete.`);
+      console.log(`[uploadToEdgeOneCOS] Upload successful.`);
 
       return {
         success: true,
@@ -595,40 +666,46 @@ const uploadDirectoryToCOS = async (
       };
     }
   } catch (error) {
-    console.error('Error uploading to COS:', error);
+    console.error('Error uploading to COS: ' + error);
     throw error;
   }
 };
 
 /**
- * Poll for project status until it's no longer processing
+ * Poll for deployment status until it's no longer processing
  */
 const pollProjectStatus = async (
-  projectId: string
-): Promise<ApiResponse<ProjectsResponse>> => {
+  projectId: string,
+  deploymentId: string
+): Promise<DeploymentResult> => {
   let isProcessing = true;
-  let statusResult = await describePagesProjects({
-    projectId: projectId,
-  });
+  let deployment = null;
 
   while (isProcessing) {
-    console.log(
-      `[pollProjectStatus] Project status: ${statusResult.Data.Response.Projects[0].Status}`
+    // Get list of deployments
+    const deploymentsResult = await describePagesDeployments(projectId);
+
+    // Find the specific deployment by deploymentId
+    deployment = deploymentsResult.Data.Response.Deployments.find(
+      (deploy: any) => deploy.DeploymentId === deploymentId
     );
 
-    const status = statusResult.Data.Response.Projects[0].Status;
-    if (status !== 'Process') {
+    if (!deployment) {
+      throw new Error(`Deployment with ID ${deploymentId} not found`);
+    }
+
+    console.log(`[pollProjectStatus] Deployment status: ${deployment.Status}`);
+
+    // Check if deployment is still processing
+    if (deployment.Status !== 'Process') {
       isProcessing = false;
     } else {
-      // Wait 2 seconds before next poll
-      await sleep(2000);
-      statusResult = await describePagesProjects({
-        projectId: projectId,
-      });
+      // Wait before next poll
+      await sleep(5000);
     }
   }
 
-  return statusResult;
+  return deployment as DeploymentResult;
 };
 
 /**
@@ -653,36 +730,52 @@ const validateFolder = async (localPath: string): Promise<boolean> => {
 
 /**
  * Get structured deployment result
- * @param projectStatusResult The result from polling project status
+ * @param deploymentResult The result from polling deployment status
+ * @param projectId The project ID
+ * @param env Environment to deploy to, either 'Production' or 'Preview'
  * @returns Structured deployment result with type and url
  */
 const getDeploymentStructuredResult = async (
-  projectStatusResult: ApiResponse<ProjectsResponse>
-): Promise<{ type: string; url: string }> => {
+  deploymentResult: DeploymentResult,
+  projectId: string,
+  env: 'Production' | 'Preview' = 'Production'
+): Promise<{ type: string; url: string; projectId: string }> => {
+  // Get project details to get domain information
+  const projectStatusResult = await describePagesProjects({
+    projectId: projectId,
+  });
+
   if (!projectStatusResult?.Data?.Response?.Projects?.[0]) {
     throw new Error('Failed to retrieve project status information.');
   }
 
   const project = projectStatusResult.Data.Response.Projects[0];
 
-  if (project.Status === 'Normal') {
-    if (project.CustomDomains && project.CustomDomains.length > 0) {
+  // Check deployment status
+  if (deploymentResult.Status === 'Success') {
+    // For Production environment, check for custom domains
+    if (
+      env === 'Production' &&
+      project.CustomDomains &&
+      project.CustomDomains.length > 0
+    ) {
       const customDomain = project.CustomDomains[0];
       if (customDomain.Status === 'Pass') {
         return {
           type: 'custom',
           url: `https://${customDomain.Domain}`,
+          projectId,
         };
       }
     }
 
-    console.log(`[getDeploymentStructuredResult] Deployment status is Normal.`);
-    console.log(
-      `[getDeploymentStructuredResult] Fetching encipher token for domain: ${project.PresetDomain}`
-    );
-    const encipherTokenResult = await describePagesEncipherToken(
-      project.PresetDomain
-    );
+    // Process domain information
+    const domain = deploymentResult.PreviewUrl
+      ? deploymentResult.PreviewUrl.replace('https://', '')
+      : project.PresetDomain;
+
+    const encipherTokenResult = await describePagesEncipherToken(domain);
+
     if (
       encipherTokenResult.Code !== 0 ||
       !encipherTokenResult?.Data?.Response?.Token ||
@@ -695,99 +788,103 @@ const getDeploymentStructuredResult = async (
       );
     }
     const { Token, Timestamp } = encipherTokenResult.Data.Response;
-    const url = `https://${project.PresetDomain}?eo_token=${Token}&eo_time=${Timestamp}`;
+    const url = `https://${domain}?eo_token=${Token}&eo_time=${Timestamp}`;
     return {
       type: 'temporary',
       url: url,
+      projectId,
     };
   } else {
-    console.log(
-      `[getDeploymentStructuredResult] Deployment failed with status: ${project.Status}`
+    console.error(
+      `[getDeploymentStructuredResult] Deployment failed with status: ${deploymentResult.Status}`
     );
-    throw new Error(`Deployment failed with status: ${project.Status}`);
+    throw new Error(
+      `Deployment failed with status: ${deploymentResult.Status}`
+    );
   }
-};
-
-/**
- * Format deployment result into user-friendly message
- * @param deploymentResult The structured deployment result
- * @returns Text message describing the deployment status
- */
-const formatDeploymentMessage = async (deploymentResult: {
-  type: string;
-  url: string;
-}): Promise<string> => {
-  const res = await fetch('https://proxy.edgeone.site/mcp-format', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(deploymentResult),
-  });
-
-  const { text } = await res.json();
-  return text;
 };
 
 /**
  * Deploy a local folder or zip file to EdgeOne Pages
  * @param localPath Path to the local folder or zip file to deploy
+ * @param env Environment to deploy to, either 'Production' or 'Preview'
  * @returns URL to the deployed site
  */
 export const deployFolderOrZipToEdgeOne = async (
-  localPath: string
+  localPath: string,
+  env: 'Production' | 'Preview' = 'Production'
 ): Promise<string> => {
+  // Reset token cache at the start of deployment
+  resetTokenCache();
+
   // Validate folder or zip file
   const isZip = await validateFolder(localPath);
 
   await checkAndSetBaseUrl();
 
   // 1. Upload folder to COS
-  console.log(
-    `[uploadDirectoryToCOS] Uploading ${
-      isZip ? 'zip file' : 'folder'
-    } to COS...`
-  );
-  const uploadResult = await uploadDirectoryToCOS(localPath);
+  const uploadResult = await uploadToEdgeOneCOS(localPath);
   if (!uploadResult.targetPath) {
     throw new Error('COS upload succeeded but targetPath is missing.');
   }
   const targetPath = uploadResult.targetPath;
-  console.log(
-    `[uploadDirectoryToCOS] ${
-      isZip ? 'Zip file' : 'Folder'
-    } uploaded to COS target path: ${targetPath}`
-  );
 
   // 2. Get or create project
   console.log(`[getOrCreateProject] Getting or creating project...`);
   const projectResult = await getOrCreateProject();
   if (!projectResult?.Data?.Response?.Projects?.[0]?.ProjectId) {
-    console.error('Invalid project data received:', projectResult);
+    console.error('Invalid project data received: ' + projectResult);
     throw new Error('Failed to retrieve Project ID after get/create.');
   }
   const projectId = projectResult.Data.Response.Projects[0].ProjectId;
   console.log(`[getOrCreateProject] Using Project ID: ${projectId}`);
 
   // 3. Create deployment
-  console.log(`[createPagesDeployment] Creating deployment...`);
-  await createPagesDeployment({
+  console.log(
+    `[createPagesDeployment] Creating deployment in ${env} environment...`
+  );
+  const res = await createPagesDeployment({
     projectId,
     targetPath: targetPath,
     isZip,
+    env,
   });
+  const deploymentId = res.Data.Response.DeploymentId;
 
   // 4. Wait for deployment to complete
   console.log(
     `[pollProjectStatus] Waiting for deployment to complete (polling status)...`
   );
   await sleep(5000);
-  const projectStatusResult = await pollProjectStatus(projectId);
+  const deploymentResult = await pollProjectStatus(projectId, deploymentId);
 
   // 5. Get structured deployment result and format message
   const structuredResult = await getDeploymentStructuredResult(
-    projectStatusResult
+    deploymentResult,
+    projectId,
+    env
   );
+
+  /**
+   * Format deployment result into user-friendly message
+   * @param deploymentResult The structured deployment result
+   * @returns Text message describing the deployment status
+   */
+  const formatDeploymentMessage = async (deploymentResult: {
+    type: string;
+    url: string;
+  }): Promise<string> => {
+    const res = await fetch('https://proxy.edgeone.site/mcp-format', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(deploymentResult),
+    });
+
+    const { text } = await res.json();
+    return text;
+  };
   const text = await formatDeploymentMessage(structuredResult);
   return text;
 };
