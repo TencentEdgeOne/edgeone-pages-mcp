@@ -33,6 +33,19 @@ export const getAuthorization = () => {
 // Get projectName from environment variable
 const getProjectName = () => process.env.EDGEONE_PAGES_PROJECT_NAME || '';
 
+let tempProjectName: string | undefined;
+
+const getTempProjectName = (): string => {
+  if (!tempProjectName) {
+    tempProjectName = `local-upload-${Date.now()}`;
+  }
+  return tempProjectName;
+};
+
+const resetTempProjectName = (): void => {
+  tempProjectName = undefined;
+};
+
 // Types
 interface FileInfo {
   isDir: boolean;
@@ -225,7 +238,7 @@ const getCosTempToken = async (): Promise<CosTempTokenResponse> => {
       throw new Error(`Project ${getProjectName()} not found`);
     }
   } else {
-    body = { ProjectName: `local-upload-${Date.now()}` };
+    body = { ProjectName: getTempProjectName() };
   }
 
   const res = await fetch(`${BASE_API_URL}`, {
@@ -284,7 +297,7 @@ const createPagesProject = async (): Promise<ApiResponse<ProjectsResponse>> => {
       },
       body: JSON.stringify({
         Action: 'CreatePagesProject',
-        Name: getProjectName() || `local-upload-${Date.now()}`,
+        Name: getProjectName() || getTempProjectName(),
         Provider: 'Upload',
         Channel: 'Custom',
         Area: 'global',
@@ -816,6 +829,7 @@ export const deployFolderOrZipToEdgeOne = async (
 ): Promise<string> => {
   // Reset token cache at the start of deployment
   resetTokenCache();
+  resetTempProjectName();
 
   // Validate folder or zip file
   const isZip = await validateFolder(localPath);
