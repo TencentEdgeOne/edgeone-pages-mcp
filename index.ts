@@ -5,6 +5,9 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { deployFolderOrZipToEdgeOne } from './tools/deploy_folder_or_zip.js';
 import { deployHtmlToEdgeOne } from './tools/deploy_html.js';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
 import dotenv from 'dotenv';
 dotenv.config();
@@ -86,6 +89,17 @@ server.tool(
 );
 
 async function main() {
+  // Print package.json version
+  try {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const packageJsonPath = join(__dirname, 'package.json');
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+    console.log(`Package version: ${packageJson.version}`);
+  } catch (error) {
+    console.error('Error reading package.json:', error);
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

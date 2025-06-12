@@ -11,6 +11,81 @@ const BASE_API_URL2 = 'https://pages-api.edgeone.ai/v1';
 
 let BASE_API_URL = '';
 
+// Console override for logging
+interface LogEntry {
+  timestamp: string;
+  level: string;
+  message: string;
+}
+
+let deploymentLogs: LogEntry[] = [];
+let originalConsole: Console;
+
+const overrideConsole = () => {
+  if (!originalConsole) {
+    originalConsole = { ...console };
+  }
+  
+  const createLogFunction = (level: string, originalFn: Function) => {
+    return (...args: any[]) => {
+      const timestamp = new Date().toISOString();
+      const message = args.map(arg => 
+        typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+      ).join(' ');
+      
+      deploymentLogs.push({
+        timestamp,
+        level,
+        message
+      });
+      
+      // Call original console function
+      originalFn.apply(console, args);
+    };
+  };
+
+  console.log = createLogFunction('LOG', originalConsole.log);
+  console.error = createLogFunction('ERROR', originalConsole.error);
+  console.warn = createLogFunction('WARN', originalConsole.warn);
+  console.info = createLogFunction('INFO', originalConsole.info);
+};
+
+const restoreConsole = () => {
+  if (originalConsole) {
+    console.log = originalConsole.log;
+    console.error = originalConsole.error;
+    console.warn = originalConsole.warn;
+    console.info = originalConsole.info;
+  }
+};
+
+const resetLogs = () => {
+  deploymentLogs = [];
+};
+
+const formatLogs = (): string => {
+  if (deploymentLogs.length === 0) {
+    return '';
+  }
+  
+  // Remove duplicates by keeping track of seen messages
+  const seenMessages = new Set<string>();
+  const uniqueLogs = deploymentLogs.filter(log => {
+    const key = `${log.level}: ${log.message}`;
+    if (seenMessages.has(key)) {
+      return false;
+    }
+    seenMessages.add(key);
+    return true;
+  });
+  
+  const logLines = uniqueLogs.map(log => {
+    return `${log.level}: ${log.message}`;
+  });
+  
+  return `Deployment Process Log:\n${'='.repeat(50)}\n${logLines.join('\n')}\n${'='.repeat(50)}\n\n`;
+};
+
 // Export BASE_API_URL for use in other files
 export const getBaseApiUrl = () => BASE_API_URL;
 
@@ -827,78 +902,98 @@ export const deployFolderOrZipToEdgeOne = async (
   localPath: string,
   env: 'Production' | 'Preview' = 'Production'
 ): Promise<string> => {
-  // Reset token cache at the start of deployment
-  resetTokenCache();
-  resetTempProjectName();
+  // Reset logs and override console at the start
+  resetLogs();
+  overrideConsole();
+  
+  try {
+    // Reset token cache at the start of deployment
+    resetTokenCache();
+    resetTempProjectName();
 
-  // Validate folder or zip file
-  const isZip = await validateFolder(localPath);
+    // Validate folder or zip file
+    const isZip = await validateFolder(localPath);
 
-  await checkAndSetBaseUrl();
+    await checkAndSetBaseUrl();
 
-  // 1. Upload folder to COS
-  const uploadResult = await uploadToEdgeOneCOS(localPath);
-  if (!uploadResult.targetPath) {
-    throw new Error('COS upload succeeded but targetPath is missing.');
-  }
-  const targetPath = uploadResult.targetPath;
+    // 1. Upload folder to COS
+    const uploadResult = await uploadToEdgeOneCOS(localPath);
+    if (!uploadResult.targetPath) {
+      throw new Error('COS upload succeeded but targetPath is missing.');
+    }
+    const targetPath = uploadResult.targetPath;
 
-  // 2. Get or create project
-  console.log(`[getOrCreateProject] Getting or creating project...`);
-  const projectResult = await getOrCreateProject();
-  if (!projectResult?.Data?.Response?.Projects?.[0]?.ProjectId) {
-    console.error('Invalid project data received: ' + projectResult);
-    throw new Error('Failed to retrieve Project ID after get/create.');
-  }
-  const projectId = projectResult.Data.Response.Projects[0].ProjectId;
-  console.log(`[getOrCreateProject] Using Project ID: ${projectId}`);
+    // 2. Get or create project
+    console.log(`[getOrCreateProject] Getting or creating project...`);
+    const projectResult = await getOrCreateProject();
+    if (!projectResult?.Data?.Response?.Projects?.[0]?.ProjectId) {
+      console.error('Invalid project data received: ' + projectResult);
+      throw new Error('Failed to retrieve Project ID after get/create.');
+    }
+    const projectId = projectResult.Data.Response.Projects[0].ProjectId;
+    console.log(`[getOrCreateProject] Using Project ID: ${projectId}`);
 
-  // 3. Create deployment
-  console.log(
-    `[createPagesDeployment] Creating deployment in ${env} environment...`
-  );
-  const res = await createPagesDeployment({
-    projectId,
-    targetPath: targetPath,
-    isZip,
-    env,
-  });
-  const deploymentId = res.Data.Response.DeploymentId;
-
-  // 4. Wait for deployment to complete
-  console.log(
-    `[pollProjectStatus] Waiting for deployment to complete (polling status)...`
-  );
-  await sleep(5000);
-  const deploymentResult = await pollProjectStatus(projectId, deploymentId);
-
-  // 5. Get structured deployment result and format message
-  const structuredResult = await getDeploymentStructuredResult(
-    deploymentResult,
-    projectId,
-    env
-  );
-
-  /**
-   * Format deployment result into user-friendly message
-   * @param deploymentResult The structured deployment result
-   * @returns Text message describing the deployment status
-   */
-  const formatDeploymentMessage = async (deploymentResult: {
-    type: string;
-    url: string;
-  }): Promise<string> => {
-    const res = await fetch('https://proxy.edgeone.site/mcp-format', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(deploymentResult),
+    // 3. Create deployment
+    console.log(
+      `[createPagesDeployment] Creating deployment in ${env} environment...`
+    );
+    const res = await createPagesDeployment({
+      projectId,
+      targetPath: targetPath,
+      isZip,
+      env,
     });
+    const deploymentId = res.Data.Response.DeploymentId;
 
-    const { text } = await res.json();
-    return text;
-  };
-  const text = await formatDeploymentMessage(structuredResult);
-  return text;
+    // 4. Wait for deployment to complete
+    console.log(
+      `[pollProjectStatus] Waiting for deployment to complete (polling status)...`
+    );
+    await sleep(5000);
+    const deploymentResult = await pollProjectStatus(projectId, deploymentId);
+
+    // 5. Get structured deployment result and format message
+    const structuredResult = await getDeploymentStructuredResult(
+      deploymentResult,
+      projectId,
+      env
+    );
+
+    /**
+     * Format deployment result into user-friendly message
+     * @param deploymentResult The structured deployment result
+     * @returns Text message describing the deployment status
+     */
+    const formatDeploymentMessage = async (deploymentResult: {
+      type: string;
+      url: string;
+    }): Promise<string> => {
+      const res = await fetch('https://proxy.edgeone.site/mcp-format', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(deploymentResult),
+      });
+
+      const { text } = await res.json();
+      return text;
+    };
+    const text = await formatDeploymentMessage(structuredResult);
+
+    // Append deployment logs to the result
+    const logs = formatLogs();
+    const finalText = `${logs}${text}`;
+
+    return finalText;
+  } catch (error) {
+    // Ensure logs are captured even on error
+    const logs = formatLogs();
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const finalText = `${logs}Deployment failed: ${errorMessage}`;
+    throw new Error(finalText);
+  } finally {
+    // Always restore console
+    restoreConsole();
+  }
 };
