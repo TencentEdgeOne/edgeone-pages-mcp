@@ -25,20 +25,22 @@ const overrideConsole = () => {
   if (!originalConsole) {
     originalConsole = { ...console };
   }
-  
+
   const createLogFunction = (level: string, originalFn: Function) => {
     return (...args: any[]) => {
       const timestamp = new Date().toISOString();
-      const message = args.map(arg => 
-        typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-      ).join(' ');
-      
+      const message = args
+        .map((arg) =>
+          typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+        )
+        .join(' ');
+
       deploymentLogs.push({
         timestamp,
         level,
-        message
+        message,
       });
-      
+
       // Call original console function
       originalFn.apply(console, args);
     };
@@ -67,10 +69,10 @@ const formatLogs = (): string => {
   if (deploymentLogs.length === 0) {
     return '';
   }
-  
+
   // Remove duplicates by keeping track of seen messages
   const seenMessages = new Set<string>();
-  const uniqueLogs = deploymentLogs.filter(log => {
+  const uniqueLogs = deploymentLogs.filter((log) => {
     const key = `${log.level}: ${log.message}`;
     if (seenMessages.has(key)) {
       return false;
@@ -78,12 +80,14 @@ const formatLogs = (): string => {
     seenMessages.add(key);
     return true;
   });
-  
-  const logLines = uniqueLogs.map(log => {
+
+  const logLines = uniqueLogs.map((log) => {
     return `${log.level}: ${log.message}`;
   });
-  
-  return `Deployment Process Log:\n${'='.repeat(50)}\n${logLines.join('\n')}\n${'='.repeat(50)}\n\n`;
+
+  return `Deployment Process Log:\n${'='.repeat(50)}\n${logLines.join(
+    '\n'
+  )}\n${'='.repeat(50)}\n\n`;
 };
 
 // Export BASE_API_URL for use in other files
@@ -817,17 +821,39 @@ const validateFolder = async (localPath: string): Promise<boolean> => {
 };
 
 /**
+ * Get project console URL based on the current API endpoint
+ */
+const getProjectConsoleUrl = (projectId: string): string => {
+  const url1 = `https://console.cloud.tencent.com/edgeone/pages/project/${projectId}/index`;
+  const url2 = `https://console.tencentcloud.com/edgeone/pages/project/${projectId}/index`;
+
+  if (BASE_API_URL === BASE_API_URL1) {
+    return url1;
+  } else if (BASE_API_URL === BASE_API_URL2) {
+    return url2;
+  } else {
+    return url1;
+  }
+};
+
+/**
  * Get structured deployment result
  * @param deploymentResult The result from polling deployment status
  * @param projectId The project ID
  * @param env Environment to deploy to, either 'Production' or 'Preview'
- * @returns Structured deployment result with type and url
+ * @returns Structured deployment result with type, url, projectId, and consoleUrl
  */
 const getDeploymentStructuredResult = async (
   deploymentResult: DeploymentResult,
   projectId: string,
   env: 'Production' | 'Preview' = 'Production'
-): Promise<{ type: string; url: string; projectId: string }> => {
+): Promise<{
+  type: 'custom' | 'temporary';
+  url: string;
+  projectId: string;
+  consoleUrl: string;
+  projectName: string;
+}> => {
   // Get project details to get domain information
   const projectStatusResult = await describePagesProjects({
     projectId: projectId,
@@ -853,6 +879,8 @@ const getDeploymentStructuredResult = async (
           type: 'custom',
           url: `https://${customDomain.Domain}`,
           projectId,
+          projectName: project.Name,
+          consoleUrl: getProjectConsoleUrl(projectId),
         };
       }
     }
@@ -881,9 +909,11 @@ const getDeploymentStructuredResult = async (
       type: 'temporary',
       url: url,
       projectId,
+      projectName: project.Name,
+      consoleUrl: getProjectConsoleUrl(projectId),
     };
   } else {
-    console.error(
+    console.log(
       `[getDeploymentStructuredResult] Deployment failed with status: ${deploymentResult.Status}`
     );
     throw new Error(
@@ -905,7 +935,7 @@ export const deployFolderOrZipToEdgeOne = async (
   // Reset logs and override console at the start
   resetLogs();
   overrideConsole();
-  
+
   try {
     // Reset token cache at the start of deployment
     resetTokenCache();
@@ -964,26 +994,13 @@ export const deployFolderOrZipToEdgeOne = async (
      * @param deploymentResult The structured deployment result
      * @returns Text message describing the deployment status
      */
-    const formatDeploymentMessage = async (deploymentResult: {
-      type: string;
-      url: string;
-    }): Promise<string> => {
-      const res = await fetch('https://proxy.edgeone.site/mcp-format', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(deploymentResult),
-      });
-
-      const { text } = await res.json();
-      return text;
-    };
-    const text = await formatDeploymentMessage(structuredResult);
 
     // Append deployment logs to the result
     const logs = formatLogs();
-    const finalText = `${logs}${text}`;
+    const finalText = `${logs}
+
+results:
+${JSON.stringify(structuredResult, null, 2)}`;
 
     return finalText;
   } catch (error) {

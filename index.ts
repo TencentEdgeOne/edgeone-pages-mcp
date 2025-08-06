@@ -5,9 +5,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { deployFolderOrZipToEdgeOne } from './tools/deploy_folder_or_zip.js';
 import { deployHtmlToEdgeOne } from './tools/deploy_html.js';
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { showPackageVersion } from './src/utils.js';
 
 import dotenv from 'dotenv';
 dotenv.config();
@@ -63,17 +61,17 @@ After deployment, the system will generate and return a public URL where your co
 
 server.tool(
   'deploy_folder_or_zip',
-  'Deploy a folder or zip file to EdgeOne Pages, return the public URL',
+  'Deploy a built frontend directory (or zip file) to EdgeOne Pages. Returns: the deployment URL and project metadata.',
   {
-    localPath: z
+    builtFolderPath: z
       .string()
       .describe(
-        'Provide the path to the folder or zip file you wish to deploy.'
+        'Provide the absolute path to the built frontend folder(or zip file) you wish to deploy.'
       ),
   },
-  async ({ localPath }) => {
+  async ({ builtFolderPath }) => {
     try {
-      const result = await deployFolderOrZipToEdgeOne(localPath);
+      const result = await deployFolderOrZipToEdgeOne(builtFolderPath);
       return {
         content: [
           {
@@ -89,16 +87,7 @@ server.tool(
 );
 
 async function main() {
-  // Print package.json version
-  try {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
-    const packageJsonPath = join(__dirname, 'package.json');
-    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
-    console.log(`Package version: ${packageJson.version}`);
-  } catch (error) {
-    console.error('Error reading package.json:', error);
-  }
+  showPackageVersion();
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
