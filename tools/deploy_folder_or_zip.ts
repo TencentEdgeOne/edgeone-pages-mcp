@@ -40,9 +40,6 @@ const overrideConsole = () => {
         level,
         message,
       });
-
-      // Call original console function
-      originalFn.apply(console, args);
     };
   };
 
