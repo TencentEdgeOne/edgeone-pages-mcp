@@ -1,6 +1,6 @@
 # EdgeOne Pages MCP
 
-An MCP service for deploying HTML content, folder, and zip file to EdgeOne Pages and obtaining a publicly accessible URL.
+An MCP service for deploying HTML content, folders, or full-stack projects to EdgeOne Pages and obtaining publicly accessible URLs.
 
 <a href="https://glama.ai/mcp/servers/@TencentEdgeOne/edgeone-pages-mcp">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@TencentEdgeOne/edgeone-pages-mcp/badge" alt="EdgeOne Pages MCP server" />
@@ -20,11 +20,27 @@ An MCP service for deploying HTML content, folder, and zip file to EdgeOne Pages
 
 - Node.js 18 or higher
 
-## Configure MCP
+## MCP Configuration
 
 ### stdio MCP Server
 
-Suitable for most MCP applications
+Full-featured MCP service that supports the `deploy_folder` tool for deploying full-stack projects.
+
+```json
+{
+  "mcpServers": {
+    "edgeone-pages-mcp-server": {
+      "timeout": 600,
+      "command": "npx",
+      "args": ["edgeone-pages-mcp-fullstack"]
+    }
+  }
+}
+```
+
+The following MCP Server will be deprecated soon:
+
+Supports both `deploy_html` and `deploy_folder_or_zip` tools.
 
 ```json
 {
@@ -33,7 +49,7 @@ Suitable for most MCP applications
       "command": "npx",
       "args": ["edgeone-pages-mcp"],
       "env": {
-        // Optional. If deploying a folder or zip file to an EdgeOne Pages project
+        // Optional. If you need to deploy folders or zip files to EdgeOne Pages projects,
         // provide your EdgeOne Pages API token.
         // How to obtain your API token: https://edgeone.ai/document/177158578324279296
         "EDGEONE_PAGES_API_TOKEN": "",
@@ -46,9 +62,9 @@ Suitable for most MCP applications
 }
 ```
 
-### Streamable HTTP MCP Server
+### Streaming HTTP MCP Server
 
-Available in applications supporting Streamable HTTP MCP Server
+For MCP clients that support HTTP streaming, only supports the `deploy_html` tool.
 
 ```json
 {
@@ -60,48 +76,52 @@ Available in applications supporting Streamable HTTP MCP Server
 }
 ```
 
-## Architecture
+## Tool Details
+
+### deploy_html Tool
+
+#### Architecture Design
 
 ![EdgeOne Pages MCP Architecture](./assets/architecture.svg)
 
-The architecture diagram illustrates the workflow:
+The architecture diagram shows the complete workflow of the `deploy_html` tool:
 
 1. Large Language Model generates HTML content
 2. Content is sent to the EdgeOne Pages MCP Server
 3. MCP Server deploys the content to EdgeOne Pages Edge Functions
 4. Content is stored in EdgeOne KV Store for fast edge access
-5. MCP Server returns a public URL
+5. MCP Server returns a publicly accessible URL
 6. Users can access the deployed content via browser with fast edge delivery
 
-## Features
+#### Implementation Details
 
-- MCP protocol for rapid deployment of HTML content to EdgeOne Pages
-- Automatic generation of publicly accessible URLs
+This tool integrates with EdgeOne Pages Functions to deploy static HTML content:
 
-## Implementation
+1. **EdgeOne Pages Functions** - A serverless computing platform that supports executing JavaScript/TypeScript code at the edge
 
-This MCP service integrates with EdgeOne Pages Functions to deploy static HTML content. The implementation uses:
+2. **Core Implementation Features**:
 
-1. **EdgeOne Pages Functions** - A serverless computing platform that allows execution of JavaScript/TypeScript code at the edge.
+   - Uses EdgeOne Pages KV storage to save and serve HTML content
+   - Automatically generates publicly accessible URLs for each deployment
+   - Provides comprehensive API error handling and feedback
 
-2. **Key Implementation Details** :
+3. **How It Works**:
+   - MCP server receives HTML content through the `deploy_html` tool
+   - Connects to EdgeOne Pages API to obtain the base URL
+   - Deploys HTML content using the EdgeOne Pages KV API
+   - Returns an immediately accessible public URL
 
-   - Uses EdgeOne Pages KV store to store and serve the HTML content
-   - Automatically generates a public URL for each deployment
-   - Handles API errors with appropriate error messages
+For more information, refer to the [EdgeOne Pages Functions documentation](https://edgeone.ai/document/162227908259442688) and [EdgeOne Pages KV Storage Guide](https://edgeone.ai/document/162227803822321664).
 
-3. **How it works** :
+The source code is open source and can be self-deployed with custom domain binding: https://github.com/TencentEdgeOne/self-hosted-pages-mcp
 
-   - The MCP server accepts HTML content through the `deploy_html` tool
-   - It connects to EdgeOne Pages API to get the base URL
-   - Deploys the HTML content using the EdgeOne Pages KV API
-   - Returns a publicly accessible URL to the deployed content
+### deploy_folder Tool
 
-4. **Usage Example** :
-   - Provide HTML content to the MCP service
-   - Receive a public URL that can be accessed immediately
+This tool supports deploying complete projects to EdgeOne Pages:
 
-For more information, see the [EdgeOne Pages Functions documentation](https://edgeone.ai/document/162227908259442688) and [EdgeOne Pages KV Storage Guide](https://edgeone.ai/document/162227803822321664).
+- Supports full deployment of static website projects
+- Supports deployment of full-stack applications
+- Option to update existing projects or create new ones
 
 ## License
 
