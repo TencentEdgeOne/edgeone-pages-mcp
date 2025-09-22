@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/tencentedgeone-edgeone-pages-mcp-badge.png)](https://mseep.ai/app/tencentedgeone-edgeone-pages-mcp)
+
 # EdgeOne Pages MCP
 
 An MCP service for deploying HTML content, folders, or full-stack projects to EdgeOne Pages and obtaining publicly accessible URLs.
