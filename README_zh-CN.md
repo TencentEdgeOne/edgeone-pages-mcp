@@ -53,16 +53,18 @@
 
 支持 `deploy_html` 和 `deploy_folder_or_zip` 两种工具。
 
-```json
+```jsonc
 {
   "mcpServers": {
     "edgeone-pages-mcp-server": {
       "command": "npx",
       "args": ["edgeone-pages-mcp"],
       "env": {
-        // 可选配置。如果需要将文件夹或 zip 文件部署到 EdgeOne Pages 项目
+        // 可选配置。
+        // 如果需要将文件夹或 zip 文件部署到 EdgeOne Pages 项目
         // 请提供您的 EdgeOne Pages API 令牌。
-        // 获取 API 令牌的方法：https://edgeone.ai/document/177158578324279296
+        // 获取 API 令牌的方法：
+        // https://edgeone.ai/document/177158578324279296
         "EDGEONE_PAGES_API_TOKEN": "",
         // 可选配置。留空将创建新的 EdgeOne Pages 项目。
         // 提供项目名称可更新现有项目。

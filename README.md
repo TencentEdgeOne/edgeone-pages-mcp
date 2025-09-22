@@ -53,16 +53,18 @@ The following MCP Server will be deprecated soon:
 
 Supports both `deploy_html` and `deploy_folder_or_zip` tools.
 
-```json
+```jsonc
 {
   "mcpServers": {
     "edgeone-pages-mcp-server": {
       "command": "npx",
       "args": ["edgeone-pages-mcp"],
       "env": {
-        // Optional. If you need to deploy folders or zip files to EdgeOne Pages projects,
-        // provide your EdgeOne Pages API token.
-        // How to obtain your API token: https://edgeone.ai/document/177158578324279296
+        // Optional. 
+        // If you need to deploy folders or zip files to 
+        // EdgeOne Pages projects, provide your EdgeOne Pages API token.
+        // How to obtain your API token: 
+        // https://edgeone.ai/document/177158578324279296
         "EDGEONE_PAGES_API_TOKEN": "",
         // Optional. Leave empty to create a new EdgeOne Pages project.
         // Provide a project name to update an existing project.
