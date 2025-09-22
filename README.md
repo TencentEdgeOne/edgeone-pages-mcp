@@ -42,6 +42,7 @@ Full-featured MCP service that supports the `deploy_folder` tool for deploying f
 {
   "mcpServers": {
     "edgeone-pages-mcp-server": {
+      "timeout": 600,
       "command": "npx",
       "args": ["edgeone-pages-mcp-fullstack", "--region", "china"]
     }
