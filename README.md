@@ -26,13 +26,24 @@ An MCP service for deploying HTML content, folders, or full-stack projects to Ed
 
 Full-featured MCP service that supports the `deploy_folder` tool for deploying full-stack projects.
 
-```json
+```jsonc
+// Tencent Cloud International (Default)
 {
   "mcpServers": {
     "edgeone-pages-mcp-server": {
       "timeout": 600,
       "command": "npx",
       "args": ["edgeone-pages-mcp-fullstack"]
+    }
+  }
+}
+
+// Tencent Cloud China
+{
+  "mcpServers": {
+    "edgeone-pages-mcp-server": {
+      "command": "npx",
+      "args": ["edgeone-pages-mcp-fullstack", "--region", "china"]
     }
   }
 }

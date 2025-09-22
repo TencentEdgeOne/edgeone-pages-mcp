@@ -26,13 +26,24 @@
 
 完整功能的 MCP 服务，支持 `deploy_folder` 工具，用于部署全栈项目。
 
-```json
+```jsonc
+// 腾讯云国际站（默认）
 {
   "mcpServers": {
     "edgeone-pages-mcp-server": {
       "timeout": 600,
       "command": "npx",
       "args": ["edgeone-pages-mcp-fullstack"]
+    }
+  }
+}
+
+// 腾讯云中国站
+{
+  "mcpServers": {
+    "edgeone-pages-mcp-server": {
+      "command": "npx",
+      "args": ["edgeone-pages-mcp-fullstack", "--region", "china"]
     }
   }
 }
