@@ -42,6 +42,7 @@
 {
   "mcpServers": {
     "edgeone-pages-mcp-server": {
+      "timeout": 600,
       "command": "npx",
       "args": ["edgeone-pages-mcp-fullstack", "--region", "china"]
     }
