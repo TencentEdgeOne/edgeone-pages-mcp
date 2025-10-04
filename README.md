@@ -2,6 +2,8 @@
 
 An MCP service for deploying HTML content, folders, or full-stack projects to EdgeOne Pages and obtaining publicly accessible URLs.
 
+[![MCPHub.com Badge](https://mcphub.com/api/mcp-servers/tencentedgeone/edgeone-pages-mcp/badge)](https://mcphub.com/mcp-servers/tencentedgeone/edgeone-pages-mcp)
+
 <a href="https://glama.ai/mcp/servers/@TencentEdgeOne/edgeone-pages-mcp">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@TencentEdgeOne/edgeone-pages-mcp/badge" alt="EdgeOne Pages MCP server" />
 </a>
