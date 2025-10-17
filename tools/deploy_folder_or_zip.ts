@@ -375,6 +375,7 @@ const createPagesProject = async (): Promise<ApiResponse<ProjectsResponse>> => {
         Action: 'CreatePagesProject',
         Name: getProjectName() || getTempProjectName(),
         Provider: 'Upload',
+        Source: 'mcp',
         Channel: 'Custom',
         Area: 'global',
       }),
