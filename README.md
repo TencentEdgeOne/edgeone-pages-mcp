@@ -33,7 +33,7 @@ Full-featured MCP service that supports the `deploy_folder` tool for deploying f
     "edgeone-pages-mcp-server": {
       "timeout": 600,
       "command": "npx",
-      "args": ["edgeone-pages-mcp-fullstack"]
+      "args": ["edgeone-pages-mcp-fullstack@latest"]
     }
   }
 }
@@ -44,7 +44,7 @@ Full-featured MCP service that supports the `deploy_folder` tool for deploying f
     "edgeone-pages-mcp-server": {
       "timeout": 600,
       "command": "npx",
-      "args": ["edgeone-pages-mcp-fullstack", "--region", "china"]
+      "args": ["edgeone-pages-mcp-fullstack@latest", "--region", "china"]
     }
   }
 }
@@ -59,7 +59,7 @@ Supports both `deploy_html` and `deploy_folder_or_zip` tools.
   "mcpServers": {
     "edgeone-pages-mcp-server": {
       "command": "npx",
-      "args": ["edgeone-pages-mcp"],
+      "args": ["edgeone-pages-mcp@latest"],
       "env": {
         // Optional. 
         // If you need to deploy folders or zip files to 
