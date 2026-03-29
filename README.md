@@ -140,3 +140,8 @@ This tool supports deploying complete projects to EdgeOne Pages:
 ## License
 
 MIT
+
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/tencentedgeone-edgeone-pages-mcp).
+
