@@ -582,6 +582,11 @@ const getCosInstance = async (): Promise<COS> => {
  * Recursively list all files in a directory
  */
 const fastListFolder = async (rootPath: string): Promise<FileInfo[]> => {
+  const resolvedRoot = await fs.realpath(rootPath);
+  const rootPrefix = resolvedRoot.endsWith(path.sep)
+    ? resolvedRoot
+    : resolvedRoot + path.sep;
+
   const list: FileInfo[] = [];
 
   const deep = async (dirPath: string): Promise<void> => {
@@ -589,8 +594,22 @@ const fastListFolder = async (rootPath: string): Promise<FileInfo[]> => {
 
     for (const file of files) {
       const filePath = path.join(dirPath, file.name);
-      const isDir = file.isDirectory();
-      const stats = await fs.stat(filePath);
+      const stats = await fs.lstat(filePath);
+
+      if (stats.isSymbolicLink()) {
+        throw new Error(
+          `Symbolic link is not allowed in deploy directories: "${filePath}".`
+        );
+      }
+
+      const isDir = stats.isDirectory();
+
+      const realFilePath = await fs.realpath(filePath);
+      if (realFilePath !== resolvedRoot && !realFilePath.startsWith(rootPrefix)) {
+        throw new Error(
+          `File "${filePath}" resolves to "${realFilePath}" which is outside the deploy root "${resolvedRoot}".`
+        );
+      }
 
       list.push({
         isDir,
@@ -605,7 +624,7 @@ const fastListFolder = async (rootPath: string): Promise<FileInfo[]> => {
   };
 
   try {
-    await deep(rootPath);
+    await deep(resolvedRoot);
     if (list.length > 1000000) {
       throw new Error('too_much_files');
     }
@@ -808,10 +827,16 @@ const validateFolder = async (localPath: string): Promise<boolean> => {
     throw new Error('localPath does not exist');
   }
 
-  const stats = await fs.stat(localPath);
+  const lstats = await fs.lstat(localPath);
+  if (lstats.isSymbolicLink()) {
+    throw new Error(
+      'localPath is a symbolic link. Please provide a real directory or zip file path.'
+    );
+  }
+
   const isZip = isZipFile(localPath);
 
-  if (!stats.isDirectory() && !isZip) {
+  if (!lstats.isDirectory() && !isZip) {
     throw new Error('localPath must be a folder or zip file');
   }
 
