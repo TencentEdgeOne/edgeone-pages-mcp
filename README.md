@@ -2,10 +2,6 @@
 
 An MCP service for deploying full-stack projects to EdgeOne Makers and obtaining publicly accessible URLs.
 
-<a href="https://glama.ai/mcp/servers/@TencentEdgeOne/edgeone-pages-mcp">
-  <img width="380" height="200" src="https://glama.ai/mcp/servers/@TencentEdgeOne/edgeone-pages-mcp/badge" alt="EdgeOne Makers MCP server" />
-</a>
-
 ## Requirements
 
 - Node.js 18 or higher
